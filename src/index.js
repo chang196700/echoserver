@@ -1,11 +1,53 @@
+const REDACTED = '[REDACTED]';
+
+// Headers whose values contain sensitive user data
+const SENSITIVE_HEADERS = new Set([
+  'cookie',
+  'set-cookie',
+  'authorization',
+  'proxy-authorization',
+  'cf-connecting-ip',
+  'x-real-ip',
+  'x-forwarded-for',
+  'cf-ray',
+]);
+
+// CF object keys that contain TLS fingerprinting or client auth data
+const SENSITIVE_CF_KEYS = new Set([
+  'tlsClientRandom',
+  'tlsClientCiphersSha1',
+  'tlsClientExtensionsSha1',
+  'tlsClientExtensionsSha1Le',
+  'tlsExportedAuthenticator',
+  'tlsClientAuth',
+  'tlsClientHelloLength',
+]);
+
+function redactHeaders(headers) {
+  const result = {};
+  for (const [key, value] of Object.entries(headers)) {
+    result[key] = SENSITIVE_HEADERS.has(key) ? REDACTED : value;
+  }
+  return result;
+}
+
+function redactCf(cf) {
+  if (!cf) return null;
+  const result = {};
+  for (const [key, value] of Object.entries(cf)) {
+    result[key] = SENSITIVE_CF_KEYS.has(key) ? REDACTED : value;
+  }
+  return result;
+}
+
 export default {
   async fetch(request) {
     const url = new URL(request.url);
 
     // Collect headers
-    const headers = {};
+    const rawHeaders = {};
     for (const [key, value] of request.headers.entries()) {
-      headers[key] = value;
+      rawHeaders[key] = value;
     }
 
     // Collect query params
@@ -29,9 +71,9 @@ export default {
       url: request.url,
       path: url.pathname,
       query,
-      headers,
+      headers: redactHeaders(rawHeaders),
       body: body || null,
-      cf: request.cf || null,
+      cf: redactCf(request.cf),
     };
 
     return new Response(JSON.stringify(echo, null, 2), {
